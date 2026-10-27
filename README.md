@@ -1,95 +1,169 @@
-# 🚀 Gmail AI Reply Assistant (Multi-Provider Pro)
+# 🚀 Gmail AI Reply Assistant
 
-একটি বিশ্বমানের, সুপার-ফাস্ট ও ওপেন-সোর্স **Chrome Extension (Manifest V3)** যা সরাসরি Gmail-এর ভেতর কাজ করে। আপনি আপনার পছন্দ অনুযায়ী **Google Gemini**, **OpenAI (ChatGPT)** অথবা **Anthropic (Claude)**—যেকোনো AI মডেল দিয়ে চমৎকার প্রফেশনাল ইমেইল তৈরি ও ড্রাফট পলিশ করতে পারেন!
+<p align="center">
+  <img src="assets/preview.png" alt="Gmail AI Reply Assistant Preview" width="380" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);" />
+</p>
+
+<p align="center">
+  <b>A state-of-the-art, lightning-fast Chrome Extension (Manifest V3) that crafts intelligent, context-aware email replies directly inside Gmail and Google Chat.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/rayhanvision-a11y/gmail-ai-reply-assistant/releases"><img src="https://img.shields.io/github/v/release/rayhanvision-a11y/gmail-ai-reply-assistant?color=blue&label=version" alt="Release Version"></a>
+  <img src="https://img.shields.io/badge/Manifest-V3-success?style=flat&color=10b981" alt="Manifest V3">
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
+  <img src="https://img.shields.io/badge/AI%20Models-Gemini%20%7C%20GPT--4o%20%7C%20Claude%203.5-8b5cf6" alt="Supported Models">
+  <img src="https://img.shields.io/badge/Privacy-100%25%20Local-orange" alt="Privacy First">
+</p>
 
 ---
 
-## 📥 ডাউনলোড ও ইন্সটলেশন গাইড (Download & Installation)
+## 🌟 Highlights & Key Features
 
-আপনার পছন্দ অনুযায়ী নিচের যেকোনো একটি পদ্ধতিতে ইন্সটল করতে পারেন:
+### 🤖 1. Multi-Provider AI Architecture
+Choose and switch between your favorite AI models anytime from the settings popup:
+- **Google Gemini:** Gemini 1.5 / 2.0 Flash *(blazing-fast speed, generous free tier)*.
+- **OpenAI (ChatGPT):** `gpt-4o-mini` and `gpt-4o` for unparalleled reasoning.
+- **Anthropic (Claude):** `claude-3-5-haiku` and `claude-3-5-sonnet` for eloquent, natural business writing.
+- **OpenRouter:** Access free community models (`Llama 3.3 70B`, `DeepSeek V3`, `Qwen 2.5`).
+- **Chrome Built-in AI (Gemini Nano):** Zero key, zero cost, completely on-device offline processing.
 
-### পদ্ধতি ১: Git Clone (সবচেয়ে সহজ ও অটো-আপডেট / সিঙ্ক সুবিধা) ⭐ [রিকমেন্ডেড]
+### ⚡ 2. 1-Click Quick Smart Reply Chips
+The assistant intelligently analyzes incoming emails and generates instant intent chips:
+- `🙏 Thanks & Received`
+- `👍 Confirm & Agree`
+- `📅 Propose Meeting`
+- `⚡ Quick Update`
+- `❌ Polite Decline`
+Click any chip to generate a full, contextually accurate reply in seconds.
 
-Git দিয়ে ক্লোন করে রাখলে পরবর্তীতে যেকোনো নতুন আপডেট আসলে মাত্র ১ সেকেন্ডে সিঙ্ক করে নিতে পারবেন:
+### 🎭 3. Dynamic Tone & Voice Controls
+Adapt the tone of your message to any business situation:
+- 👔 **Professional:** Corporate, respectful, and authoritative.
+- 😊 **Warm & Friendly:** Courteous, welcoming, and approachable.
+- ⚡ **Direct (2-3 lines):** Concise, to-the-point answers for busy recipients.
+- 🤝 **Accept & Confirm:** Clear approval with next steps.
 
-1. **ক্লোন করুন:** আপনার কম্পিউটারের যেকোনো ফোল্ডারে টার্মিনাল বা গিট ব্যাশ খুলে রান করুন:
+### 📏 4. Length Controller & Multi-Draft Options
+- **Short (2-3 lines):** Brief, efficient responses.
+- **Normal:** Standard 1-2 paragraph professional emails.
+- **Detailed:** Comprehensive, multi-point breakdowns.
+- **Draft Generator:** Toggle between single or multiple drafts with one click.
+
+### 🪄 5. Polish Draft / Rewrite Mode
+Already typed a rough note or hurried draft? Switch to the **"Polish Draft"** tab to:
+- Transform broken shorthand notes into polished executive prose.
+- Fix grammar, syntax, spelling, and corporate etiquette instantly.
+- Shorten lengthy emails without losing essential details.
+
+### 🔄 6. Built-in In-Extension Update & Sync
+No need to run manual Git commands or dig through settings:
+- Open the extension popup and click **"🔄 Sync Now"**.
+- Automatically checks GitHub for new releases.
+- Download the latest update ZIP or reload the extension in 1-click directly from the popup UI.
+
+### 🔒 7. Privacy First by Design
+- **Direct API Connections:** Your browser connects directly to official Google, OpenAI, and Anthropic APIs.
+- **No Middleman Servers:** No telemetry tracking, no analytics, and no remote databases.
+- **Secure Local Storage:** API keys remain strictly stored inside your browser's encrypted local storage (`chrome.storage.local`).
+
+---
+
+## 📥 Installation Guide
+
+### Method 1: Git Clone (Recommended for 1-Click Sync) ⭐
+
+Cloning via Git allows you to receive instant updates with zero friction:
+
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/rayhanvision-a11y/gmail-ai-reply-assistant.git
    ```
-2. **Chrome-এ লোড করুন:**
-   - ক্রোম ব্রাউজারে `chrome://extensions` ওপেন করুন।
-   - উপরের ডানদিকের **"Developer mode"** অন করুন।
-   - **"Load unpacked"** বাটনে ক্লিক করে ক্লোন করা `gmail-ai-reply-assistant` ফোল্ডারটি সিলেক্ট করুন।
 
-> 🔄 **এক্সটেনশনের ভেতর থেকেই ১-ক্লিকে সিঙ্ক ও আপডেট করার নিয়ম:**
-> কোনো গিট কমান্ড ছাড়াই এক্সটেনশন পপআপের **"🔄 GitHub Sync & Updates"** সেকশনে গিয়ে **"Sync Now"** বাটনে ক্লিক করলেই:
-> - এটি স্বয়ংক্রিয়ভাবে গিটহাব থেকে নতুন আপডেট চেক করবে।
-> - নতুন আপডেট থাকলে সরাসরি **"⬇️ Download ZIP"** ও **"🔄 Reload Extension"** বাটন দেখাবে, যাতে ব্রাউজার থেকেই সাথে সাথে নতুন ভার্সনে আপডেট করা যায়!
-> - আর আপনি যদি গিট ক্লোন ব্যবহারকারী হন, আপডেট হওয়ার পর এই রিলোড বাটনেই এক্সটেনশন রিলোড হয়ে যাবে (`chrome://extensions` পেজেও যাওয়া লাগবে না)।
+2. **Load into Google Chrome:**
+   - Navigate to `chrome://extensions` in your Chrome address bar.
+   - Toggle on **"Developer mode"** in the top-right corner.
+   - Click **"Load unpacked"** in the top-left corner.
+   - Select the cloned `gmail-ai-reply-assistant` folder.
 
----
-
-### পদ্ধতি ২: Direct ZIP Download (GitHub Releases)
-
-আপনি যদি Git ব্যবহার না করতে চান, সরাসরি জিপ ফাইল ডাউনলোড করতে পারেন:
-
-1. ⬇️ **ডাউনলোড করুন:**
-   - **[GitHub Releases পেজ](https://github.com/rayhanvision-a11y/gmail-ai-reply-assistant/releases)** থেকে লেটেস্ট রিলিজের ZIP ফাইলটি নামিয়ে নিন।
-   - অথবা সরাসরি **[লেটেস্ট কোড জিপ (Source ZIP)](https://github.com/rayhanvision-a11y/gmail-ai-reply-assistant/archive/refs/heads/main.zip)** ডাউনলোড করুন।
-2. **আনজিপ করুন:** ডাউনলোড করা ZIP ফাইলটি যেকোনো ফোল্ডারে Extract (Unzip) করুন।
-3. **Chrome-এ লোড করুন:**
-   - Chrome ব্রাউজারে `chrome://extensions`-এ যান।
-   - **"Developer mode"** অন করুন।
-   - **"Load unpacked"** চেপে Extract করা ফোল্ডারটি সিলেক্ট করুন।
+> 🔄 **How to update in the future:**
+> When updates are released on GitHub, simply open the extension popup and click **"🔄 Sync Now"** (or run `git pull` in the folder), then hit **"Reload Extension"**.
 
 ---
 
-## ⚙️ সেটআপ ও ব্যবহারবিধি (মাত্র ৩০ সেকেন্ড):
+### Method 2: Direct ZIP Download (GitHub Releases)
 
-1. ব্রাউজারের উপরে এক্সটেনশন আইকনে (🧩) ক্লিক করে **"Gmail AI Reply Assistant"** ওপেন করুন।
-2. আপনার পছন্দের AI প্রোভাইডার সিলেক্ট করুন (**Google Gemini**, **OpenAI**, বা **Anthropic Claude**)।
-3. আপনার API Key বসিয়ে **"⚡ Test Key"** চাপুন এবং ভেরিফাই হলে **"Save Settings"** করুন।
-4. [mail.google.com](https://mail.google.com) ওপেন করে যেকোনো ইমেইলের **Reply** চাপলে কম্পোজ বক্সের টুলবারে **"✨ AI Reply"** বাটন পেয়ে যাবেন!
+If you do not use Git, download the pre-packaged archive directly:
 
----
+1. **Download:**
+   - Download the latest release ZIP from the **[GitHub Releases Page](https://github.com/rayhanvision-a11y/gmail-ai-reply-assistant/releases)**.
+   - Or download directly: **[Latest Source Code ZIP](https://github.com/rayhanvision-a11y/gmail-ai-reply-assistant/archive/refs/heads/main.zip)**.
 
-## 🌟 প্রধান ফিচারসমূহ (Key Features)
+2. **Extract:**
+   - Unzip the downloaded `.zip` file into a permanent folder on your computer.
 
-### ১. 🤖 Multi-Provider AI Support
-- **Google Gemini:** Gemini 1.5 / 2.0 Flash (ফ্রি কোটায় সুপার-ফাস্ট রেসপন্স)।
-- **OpenAI (ChatGPT):** `gpt-4o-mini` এবং `gpt-4o` ফুল সাপোর্ট।
-- **Anthropic (Claude):** `claude-3-5-haiku` এবং `claude-3-5-sonnet` সাপোর্ট।
-- এক্সটেনশন সেটিংস পপআপ থেকে এক ক্লিকেই প্রোভাইডার পরিবর্তন করা যায়।
-
-### ২. ⚡ Smart Reply Chips (ইমেইল বুঝে অটো-সাজেস্ট করা ইন্টেন্ট)
-- ইনকামিং ইমেইল স্ক্যান করে স্বয়ংক্রিয়ভাবে ৩টি তাৎক্ষণিক উত্তরের অপশন দেয়:
-  - যেমন: `[🙏 Acknowledge & Thanks]`, `[👍 Confirm & Agree]`, `[❌ Polite Decline]`
-- মাত্র এক ক্লিকেই রেডি ড্রাফট জেনারেট হয়ে যায়।
-
-### ৩. 📏 Length Controller (দৈর্ঘ্য নির্ধারণ)
-- 🤏 **Short (2-3 lines):** পয়েন্ট-টু-পয়েন্ট ও ব্যস্ত সময়ের ছোট রিপ্লাই।
-- 📄 **Standard / Normal:** স্ট্যান্ডার্ড ১-২ প্যারাগ্রাফের প্রফেশনাল ইমেইল।
-- 📚 **Detailed:** বিস্তারিত বিবরণ, পয়েন্ট ও গভীর পর্যালোচনা সহ বড় ইমেইল।
-
-### ৪. 🪄 Polish / Rewrite Draft (বিদ্যমান ড্রাফট সুন্দর করা)
-- রিপ্লাই বক্সে আগে থেকেই কোনো রাফ নোট বা খসড়া লেখা থাকলে **"Polish Draft"** দিয়ে পলিশ করুন:
-  - 👔 **Make Executive & Professional:** সাধারণ বাক্যকে করপোরেট প্রফেশনাল রূপ দেওয়া।
-  - ✨ **Fix Grammar & Flow:** ব্যাকরণ ও বানান নির্ভুল করা।
-  - 🤏 **Make Shorter & Direct:** অপ্রয়োজনীয় অংশ ছেঁটে ফেলা।
-  - 😊 **Make Warm & Friendly:** আন্তরিক ও ইতিবাচক টোন দেওয়া।
-
-### ৫. 🔄 Try Another Version & Undo
-- প্রথম তৈরি করা উত্তর পছন্দ না হলে সাথে সাথেই **"🔄 Try Another Version"** ক্লিক করে নতুন স্টাইলের রিপ্লাই পাবেন।
-- ভুল হলে পাশে থাকা **"↩ Undo"** দিয়ে তাৎক্ষণিক আগের লেখায় ফিরে যাওয়া যায়।
+3. **Load into Chrome:**
+   - Go to `chrome://extensions`.
+   - Enable **"Developer mode"**.
+   - Click **"Load unpacked"** and select the unzipped directory.
 
 ---
 
-## 🔒 প্রাইভেসি ও সিকিউরিটি (Privacy First)
+## ⚙️ Quickstart & Setup (Takes 30 Seconds)
 
-- **লোকাল স্টোরেজ:** আপনার API Key শুধু আপনার ব্রাউজারের লোকাল স্টোরেজে সুরক্ষিত থাকে। কোনো থার্ড পার্টি সার্ভার বা ডাটাবেজে যায় না।
-- **ডিরেক্ট কল:** আপনার ব্রাউজার থেকেই সরাসরি Google/OpenAI/Anthropic-এর অফিসিয়াল API-তে রিকোয়েস্ট পাঠানো হয়।
+1. Click the **puzzle icon (🧩)** in your Chrome toolbar and open **"Gmail AI Reply Assistant"**.
+2. Select your preferred AI Engine (**Google Gemini**, **OpenAI**, or **Claude**).
+3. Paste your API key:
+   - **Google Gemini:** Free API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+   - **OpenAI:** API key from [OpenAI Platform](https://platform.openai.com/api-keys).
+   - **Anthropic:** API key from [Anthropic Console](https://console.anthropic.com/settings/keys).
+4. Click **"⚡ Test Key"** to verify connection, then click **"Save Settings"**.
+5. Open [Gmail](https://mail.google.com) and click **Reply** on any email.
+6. Look at the compose bar next to the blue Send button—click **"✨ AI Reply"** to launch the assistant card!
 
 ---
 
-## 📄 লাইসেন্স
-এই প্রজেক্টটি [MIT License](LICENSE)-এর অধীনে উন্মুক্ত।
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Platform | Action |
+| :--- | :--- | :--- |
+| `Alt + Shift + R` | Windows / Linux | Toggle AI Reply Assistant on active compose |
+| `Cmd + Shift + Y` | macOS | Toggle AI Reply Assistant on active compose |
+
+---
+
+## 🛠️ Project Structure
+
+```
+gmail-ai-reply-assistant/
+├── assets/
+│   └── preview.png             # UI screenshot preview
+├── background/
+│   └── service-worker.js       # Background AI API orchestrator
+├── content/
+│   ├── content.css             # Gmail compose floating UI styling
+│   └── content.js              # DOM observer & contextual extraction
+├── icons/
+│   ├── icon-16.png
+│   ├── icon-48.png
+│   └── icon-128.png
+├── popup/
+│   ├── popup.html              # Multi-model settings & sync UI
+│   ├── popup.css               # Modern executive popup styling
+│   └── popup.js                # GitHub sync & API validation
+├── manifest.json               # Manifest V3 extension configuration
+├── LICENSE                     # MIT License
+└── README.md                   # Documentation
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE) — free for personal and commercial use.
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/rayhanvision-a11y">Rayhan Vision</a>
+</p>
