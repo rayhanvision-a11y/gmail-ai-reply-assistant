@@ -145,6 +145,30 @@
         </div>
       </div>
 
+      <!-- Section 4: Live Updates & GitHub Sync -->
+      <div class="card-section update-section">
+        <div class="section-header">
+          <span class="section-title">🔄 GitHub Sync & Updates</span>
+          <span class="version-tag" id="current-version-tag">v1.0.0</span>
+        </div>
+
+        <div class="sync-card-body">
+          <div class="sync-info-row">
+            <div class="sync-text-group">
+              <strong id="sync-status-title">Ready to Sync</strong>
+              <small class="sync-status-desc" id="sync-status-desc">Click button to check & fetch latest updates.</small>
+            </div>
+            <button type="button" id="sync-update-btn" class="sync-btn" title="Check GitHub for latest update">
+              <span class="sync-spinner" id="sync-spinner" style="display: none;">⏳</span>
+              <span class="sync-icon" id="sync-icon">🔄</span>
+              <span id="sync-btn-label">Sync Now</span>
+            </button>
+          </div>
+
+          <div id="update-action-box" class="update-action-box" style="display: none;"></div>
+        </div>
+      </div>
+
       <!-- Action Buttons Row -->
       <div class="actions-row">
         <button type="button" id="test-btn" class="btn btn-secondary">⚡ Test Key</button>

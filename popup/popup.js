@@ -407,4 +407,168 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusMsg.style.display = 'none';
     }, 4500);
   }
+
+  // ========================================================
+  // GitHub Live Sync & Update Controller
+  // ========================================================
+  const currentManifestVer = (chrome.runtime && chrome.runtime.getManifest) 
+    ? chrome.runtime.getManifest().version 
+    : '1.0.0';
+
+  const versionTag = document.getElementById('current-version-tag');
+  const syncBtn = document.getElementById('sync-update-btn');
+  const syncBtnLabel = document.getElementById('sync-btn-label');
+  const syncStatusTitle = document.getElementById('sync-status-title');
+  const syncStatusDesc = document.getElementById('sync-status-desc');
+  const updateActionBox = document.getElementById('update-action-box');
+
+  if (versionTag) {
+    versionTag.textContent = `v${currentManifestVer}`;
+  }
+
+  function compareSemver(remote, local) {
+    const r = (remote || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+    const l = (local || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(r.length, l.length); i++) {
+      const rNum = r[i] || 0;
+      const lNum = l[i] || 0;
+      if (rNum > lNum) return 1;
+      if (rNum < lNum) return -1;
+    }
+    return 0;
+  }
+
+  if (syncBtn) {
+    syncBtn.addEventListener('click', async () => {
+      syncBtn.classList.add('loading');
+      syncBtnLabel.textContent = 'Checking...';
+      syncStatusTitle.textContent = 'Contacting GitHub...';
+      syncStatusDesc.textContent = 'Checking repository releases and updates.';
+      updateActionBox.style.display = 'none';
+
+      // Ask chrome to check for extensions update if supported
+      if (chrome.runtime && chrome.runtime.requestUpdateCheck) {
+        try { chrome.runtime.requestUpdateCheck(() => {}); } catch (_) {}
+      }
+
+      const REPO_OWNER = 'rayhanvision-a11y';
+      const REPO_NAME = 'gmail-ai-reply-assistant';
+      const GITHUB_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+      const RAW_MANIFEST_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/manifest.json`;
+
+      try {
+        let latestVersion = null;
+        let releaseName = '';
+        let downloadUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/main.zip`;
+
+        // 1. Try fetching latest release from GitHub API
+        try {
+          const apiRes = await fetch(GITHUB_API_URL, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' },
+            cache: 'no-store'
+          });
+          if (apiRes.ok) {
+            const release = await apiRes.json();
+            latestVersion = (release.tag_name || '').replace(/^v/, '');
+            releaseName = release.name || release.tag_name || '';
+            const zipAsset = (release.assets || []).find(a => a.name.endsWith('.zip'));
+            if (zipAsset && zipAsset.browser_download_url) {
+              downloadUrl = zipAsset.browser_download_url;
+            } else if (release.zipball_url) {
+              downloadUrl = release.zipball_url;
+            }
+          }
+        } catch (apiErr) {
+          console.warn('[Sync] GitHub API check failed, fallback to raw manifest:', apiErr);
+        }
+
+        // 2. Fallback to raw manifest if no release found or rate-limited
+        if (!latestVersion) {
+          const rawRes = await fetch(RAW_MANIFEST_URL, { cache: 'no-store' });
+          if (rawRes.ok) {
+            const rawManifest = await rawRes.json();
+            latestVersion = rawManifest.version;
+            releaseName = `v${latestVersion}`;
+          }
+        }
+
+        if (!latestVersion) {
+          throw new Error('Unable to connect to GitHub. Please check internet connection.');
+        }
+
+        const cmp = compareSemver(latestVersion, currentManifestVer);
+
+        if (cmp > 0) {
+          // New version is available!
+          syncStatusTitle.textContent = `🎉 New Update: v${latestVersion}`;
+          syncStatusDesc.textContent = `A newer version is available on GitHub!`;
+          updateActionBox.className = 'update-action-box available';
+          updateActionBox.innerHTML = `
+            <div><strong>Update v${latestVersion} Available</strong> (${releaseName || 'Latest Release'})</div>
+            <div style="margin-top: 4px; font-size: 10.5px; color: #713f12;">
+              Download the zip or pull changes, then click Reload.
+            </div>
+            <div class="update-action-btn-row">
+              <a href="${downloadUrl}" target="_blank" class="update-action-btn primary" id="action-download-btn">⬇️ Download ZIP</a>
+              <button type="button" class="update-action-btn secondary" id="action-reload-btn">🔄 Reload Extension</button>
+            </div>
+          `;
+          updateActionBox.style.display = 'block';
+
+          // Bind reload button
+          document.getElementById('action-reload-btn')?.addEventListener('click', () => {
+            if (chrome.runtime && chrome.runtime.reload) {
+              chrome.runtime.reload();
+            } else {
+              window.location.reload();
+            }
+          });
+        } else {
+          // Extension is already up to date!
+          syncStatusTitle.textContent = `✅ Extension Up to Date`;
+          syncStatusDesc.textContent = `Running v${currentManifestVer}. Cloud connection verified.`;
+          updateActionBox.className = 'update-action-box uptodate';
+          updateActionBox.innerHTML = `
+            <div>✨ You are running the latest version (<b>v${currentManifestVer}</b>).</div>
+            <div class="update-action-btn-row">
+              <button type="button" class="update-action-btn secondary" id="action-reload-btn">🔄 Quick Reload Extension</button>
+            </div>
+          `;
+          updateActionBox.style.display = 'block';
+
+          document.getElementById('action-reload-btn')?.addEventListener('click', () => {
+            if (chrome.runtime && chrome.runtime.reload) {
+              chrome.runtime.reload();
+            } else {
+              window.location.reload();
+            }
+          });
+        }
+
+        // Save last synced timestamp
+        chrome.storage.local.set({ lastGitHubSync: Date.now() });
+
+      } catch (err) {
+        console.error('[Sync Error]', err);
+        syncStatusTitle.textContent = '❌ Sync Failed';
+        syncStatusDesc.textContent = err.message || 'Error connecting to GitHub.';
+        updateActionBox.className = 'update-action-box error';
+        updateActionBox.innerHTML = `
+          <div>${err.message || 'Could not reach GitHub.'}</div>
+          <div class="update-action-btn-row">
+            <button type="button" class="update-action-btn secondary" id="action-reload-btn">🔄 Reload Extension</button>
+          </div>
+        `;
+        updateActionBox.style.display = 'block';
+
+        document.getElementById('action-reload-btn')?.addEventListener('click', () => {
+          if (chrome.runtime && chrome.runtime.reload) chrome.runtime.reload();
+        });
+      } finally {
+        syncBtn.classList.remove('loading');
+        syncBtnLabel.textContent = 'Sync Now';
+      }
+    });
+  }
 });
+
