@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail AI Reply Assistant",
+  "version": "1.0.0",
+  "description": "AI-powered smart email reply assistant for Gmail. One-click contextual reply generation directly inside your compose window.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://chat.google.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://openrouter.ai/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*",
+        "https://chat.google.com/*"
+      ],
+      "all_frames": true,
+      "js": [
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "commands": {
+    "open-ai-reply": {
+      "suggested_key": {
+        "default": "Alt+Shift+R",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Open AI Reply Assistant on the active Gmail compose"
+    }
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Gmail AI Reply Settings",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

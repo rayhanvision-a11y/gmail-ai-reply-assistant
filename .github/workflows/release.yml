@@ -1,0 +1,39 @@
+name: Package & Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Package Chrome Extension
+        run: |
+          mkdir -p build
+          zip -r build/gmail-ai-reply-assistant.zip \
+            manifest.json \
+            background/ \
+            content/ \
+            icons/ \
+            popup/ \
+            README.md \
+            LICENSE \
+            -x "*.DS_Store" "*__MACOSX*"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: build/gmail-ai-reply-assistant.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

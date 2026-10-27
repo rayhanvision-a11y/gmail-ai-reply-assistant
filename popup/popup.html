@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail AI Reply Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Executive Header -->
+    <header class="popup-header">
+      <div class="logo-area">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>
+          </svg>
+        </div>
+        <div>
+          <h2>AI Reply Assistant</h2>
+          <p>Multi-Model Executive Copilot</p>
+        </div>
+      </div>
+      <div class="status-badge" id="status-badge">Ready</div>
+    </header>
+
+    <main class="popup-body">
+      <!-- Section 1: AI Engine & Model Card -->
+      <div class="card-section">
+        <div class="section-header">
+          <span class="section-title">AI Engine</span>
+        </div>
+
+        <!-- Provider Tabs -->
+        <div class="provider-tabs">
+          <button type="button" class="tab-btn active" data-provider="gemini">Gemini</button>
+          <button type="button" class="tab-btn" data-provider="openai">GPT</button>
+          <button type="button" class="tab-btn" data-provider="claude">Claude</button>
+          <button type="button" class="tab-btn" data-provider="openrouter">OpenRouter</button>
+          <button type="button" class="tab-btn" data-provider="chrome">Chrome AI</button>
+        </div>
+
+        <!-- Dynamic API Key Input -->
+        <div class="input-group" id="apikey-group">
+          <div class="label-row">
+            <label id="key-label" for="api-key">Gemini API Key</label>
+            <span id="key-security-badge" class="security-badge" style="display: none;">
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+              Stealth Protected
+            </span>
+          </div>
+          <div class="password-wrapper">
+            <input type="password" id="api-key" placeholder="Paste AIzaSy... key" autocomplete="off" spellcheck="false">
+            <div class="key-actions">
+              <button type="button" id="toggle-key-visibility" class="btn-icon" title="Toggle visibility">👁️</button>
+              <button type="button" id="clear-key-btn" class="btn-icon" title="Change or replace this key" style="display: none;">✏️</button>
+            </div>
+          </div>
+          <small class="help-text" id="key-help">
+            Get free key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.
+          </small>
+        </div>
+
+        <!-- Chrome Built-in AI info panel -->
+        <div class="input-group" id="chrome-ai-panel" style="display: none;">
+          <label>Chrome Built-in AI (Gemini Nano)</label>
+          <div class="info-box">
+            <div class="info-row"><span>Status:</span> <strong id="chrome-ai-status">Checking…</strong></div>
+            <small class="help-text">
+              Runs <b>on your device</b> — zero key, zero cost, no data leaves browser.<br>
+              Requires: Chrome 128+, 4 GB+ VRAM, and flag at
+              <a href="#" id="open-chrome-flag">chrome://flags/#prompt-api-for-gemini-nano</a>.
+            </small>
+          </div>
+        </div>
+
+        <!-- Model Selector -->
+        <div class="input-group" id="model-group" style="display: none;">
+          <label for="model-select">Model Version</label>
+          <div class="select-wrapper">
+            <select id="model-select" class="styled-select"></select>
+            <span class="select-arrow">▼</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Writing & Output Preferences -->
+      <div class="card-section">
+        <div class="section-header">
+          <span class="section-title">Writing Preferences</span>
+        </div>
+
+        <!-- Preferred Language Setting -->
+        <div class="input-group">
+          <label for="default-language">Preferred Language</label>
+          <div class="select-wrapper">
+            <select id="default-language" class="styled-select">
+              <option value="auto">🌐 Auto Detect (Match Email)</option>
+              <option value="en">English (US / UK)</option>
+              <option value="bn">বাংলা (Bengali)</option>
+              <option value="hi">हिन्दी (Hindi)</option>
+              <option value="es">Español</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="ar">العربية</option>
+            </select>
+            <span class="select-arrow">▼</span>
+          </div>
+        </div>
+
+        <!-- Default Length Setting -->
+        <div class="input-group">
+          <label>Default Reply Length</label>
+          <div class="pill-group" id="length-pill-group">
+            <button type="button" class="pill-btn" data-length="short">🤏 Short</button>
+            <button type="button" class="pill-btn active" data-length="medium">📄 Normal</button>
+            <button type="button" class="pill-btn" data-length="long">📚 Detailed</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Personalization & Signature -->
+      <div class="card-section">
+        <div class="section-header">
+          <span class="section-title">Personalization</span>
+        </div>
+
+        <!-- Personal & Company Role Context -->
+        <div class="input-group">
+          <label for="user-context">👤 My Role & Context</label>
+          <textarea id="user-context" class="styled-textarea" rows="2" placeholder="e.g. Senior Web Designer at VisionTech. Working hours: 9am-6pm. Website: visiontech.com.bd"></textarea>
+          <small class="help-text">AI automatically personalizes email responses using your role & company.</small>
+        </div>
+
+        <!-- Calendar / Meeting Link -->
+        <div class="input-group">
+          <label for="meeting-link">📅 Calendar / Booking Link</label>
+          <input type="url" id="meeting-link" placeholder="e.g. https://calendly.com/your-name/30min">
+        </div>
+
+        <!-- Custom Sign-off -->
+        <div class="input-group">
+          <label for="user-signoff">✍️ Custom Sign-off (Optional)</label>
+          <input type="text" id="user-signoff" placeholder="e.g. Best regards, Rayhan">
+        </div>
+      </div>
+
+      <!-- Action Buttons Row -->
+      <div class="actions-row">
+        <button type="button" id="test-btn" class="btn btn-secondary">⚡ Test Key</button>
+        <button type="button" id="save-btn" class="btn btn-primary">Save Settings</button>
+      </div>
+
+      <div id="status-message" class="status-message" style="display: none;"></div>
+    </main>
+
+    <footer class="popup-footer">
+      <span>Gemini 2.0 • GPT-4o • Claude 3.5 • OpenRouter</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

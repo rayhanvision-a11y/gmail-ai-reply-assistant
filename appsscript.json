@@ -1,0 +1,36 @@
+{
+  "timeZone": "Asia/Dhaka",
+  "dependencies": {
+    "enabledAdvancedServices": []
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/gmail.addons.execute",
+    "https://www.googleapis.com/auth/gmail.addons.current.action.compose",
+    "https://www.googleapis.com/auth/gmail.addons.current.message.readonly",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/gmail.readonly"
+  ],
+  "addOns": {
+    "common": {
+      "name": "AI Reply Assistant",
+      "logoUrl": "https://cdn-icons-png.flaticon.com/512/8649/8649595.png",
+      "layoutProperties": {
+        "primaryColor": "#1a73e8",
+        "secondaryColor": "#4285f4"
+      }
+    },
+    "gmail": {
+      "composeTrigger": {
+        "selectActions": [
+          {
+            "text": "Generate AI Reply",
+            "runFunction": "onGmailCompose"
+          }
+        ],
+        "draftAccess": "METADATA"
+      }
+    }
+  }
+}
