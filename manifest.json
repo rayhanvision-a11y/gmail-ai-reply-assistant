@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gmail AI Reply Assistant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-powered smart email reply assistant for Gmail. One-click contextual reply generation directly inside your compose window.",
   "permissions": [
     "storage"

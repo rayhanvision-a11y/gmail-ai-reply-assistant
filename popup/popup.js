@@ -84,6 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   const langSelect = document.getElementById('default-language');
+  const summaryLangSelect = document.getElementById('summary-language');
   const userContextInput = document.getElementById('user-context');
   const meetingLinkInput = document.getElementById('meeting-link');
 
@@ -99,6 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     'openrouterModel',
     'defaultLength',
     'preferredLanguage',
+    'summaryLanguage',
     'userContext',
     'meetingLink',
     'userSignOff'
@@ -114,6 +116,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (langSelect) {
     langSelect.addEventListener('change', () => {
       chrome.storage.local.set({ preferredLanguage: langSelect.value });
+    });
+  }
+
+  // Set default summary language
+  if (summaryLangSelect && storage.summaryLanguage) {
+    summaryLangSelect.value = storage.summaryLanguage;
+  }
+  if (summaryLangSelect) {
+    summaryLangSelect.addEventListener('change', () => {
+      chrome.storage.local.set({ summaryLanguage: summaryLangSelect.value });
     });
   }
 
@@ -327,6 +339,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     if (langSelect) updates.preferredLanguage = langSelect.value;
+    if (summaryLangSelect) updates.summaryLanguage = summaryLangSelect.value;
     if (userContextInput) updates.userContext = userContextInput.value.trim();
     if (meetingLinkInput) updates.meetingLink = meetingLinkInput.value.trim();
     if (cfg.keyField && keyToSave) updates[cfg.keyField] = keyToSave;

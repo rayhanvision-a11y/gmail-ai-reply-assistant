@@ -22,13 +22,16 @@
   let activeLanguage = 'auto';
   let cachedUserContext = '';
   let cachedMeetingLink = '';
+  let defaultSummaryLanguage = 'bn';
 
   // Load saved preferences from chrome.storage
-  chrome.storage.local.get(['preferredLanguage', 'defaultLength', 'userContext', 'meetingLink'], (res) => {
+  chrome.storage.local.get(['preferredLanguage', 'defaultLength', 'userContext', 'meetingLink', 'summaryLanguage'], (res) => {
     if (res && res.preferredLanguage) activeLanguage = res.preferredLanguage;
     if (res && res.defaultLength) activeLength = res.defaultLength;
     if (res && res.userContext) cachedUserContext = res.userContext;
     if (res && res.meetingLink) cachedMeetingLink = res.meetingLink;
+    if (res && res.summaryLanguage) defaultSummaryLanguage = res.summaryLanguage;
+    else if (res && res.preferredLanguage === 'en') defaultSummaryLanguage = 'en';
   });
 
   // Keep state live when updated from popup
@@ -39,6 +42,7 @@
       if (changes.defaultLength) activeLength = changes.defaultLength.newValue;
       if (changes.userContext) cachedUserContext = changes.userContext.newValue;
       if (changes.meetingLink) cachedMeetingLink = changes.meetingLink.newValue;
+      if (changes.summaryLanguage) defaultSummaryLanguage = changes.summaryLanguage.newValue;
     });
   }
 
@@ -124,7 +128,7 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.action === 'OPEN_AI_MODAL') {
       const btn = document.querySelector('.gmail-ai-reply-btn');
-      const toolbar = btn ? btn.closest('tr.btC, .gU.Up, .aDh') : null;
+      const toolbar = btn ? (btn.closest('table.aoP, form, div[role="dialog"], .M9') || btn.parentElement) : null;
       if (btn && toolbar) {
         toggleAiModal(toolbar, btn);
       }
@@ -133,126 +137,213 @@
 
 
   /**
+   * Cleans up ANY button that is not inside an active email compose window
+   * directly beside a real Send button, or inside a Google Chat composer pill.
+   */
+  function cleanupStrayButtons() {
+    document.querySelectorAll('.gmail-ai-reply-btn').forEach(btn => {
+      // 1. Must never be in left navigation rail or top global bar
+      if (btn.closest('[role="navigation"], .wT, .aeN, header[role="banner"], .gb_7a')) {
+        btn.remove();
+        return;
+      }
+
+      // 2. Chat Button validation
+      if (btn.classList.contains('gmail-ai-chat-btn')) {
+        const composer = btn.closest('div[role="region"], div[data-chat-room-id], c-wiz, div.HH22ic, [data-p]') || btn.parentElement;
+        const hasChatTextbox = composer?.querySelector('div[role="textbox"][contenteditable="true"]');
+
+        if (!composer || !hasChatTextbox) {
+          btn.remove();
+          return;
+        }
+
+        // Must NOT be stuck inside the send button container / airplane box
+        const inSendBox = btn.parentElement?.querySelector('[aria-label*="Send message" i], [data-tooltip*="Send message" i]');
+        if (inSendBox && btn.parentElement.children.length <= 3 && !btn.parentElement.classList.contains('gmail-ai-chat-suggestion-row')) {
+          btn.remove();
+          return;
+        }
+
+        // Must NOT be inside email compose
+        if (btn.closest('table.aoP, .aoP, .M9, .nH.Hd, form.b7, div[aria-label*="Message Body" i]')) {
+          btn.remove();
+          return;
+        }
+
+        return; // Valid chat button!
+      }
+
+      // 3. Email Button validation
+      const parent = btn.parentElement;
+      const grandParent = parent?.parentElement;
+      const sendNearby = parent?.querySelector('[role="button"][data-tooltip*="Send" i], [role="button"][aria-label*="Send" i], [role="button"].aoO') ||
+                         grandParent?.querySelector('[role="button"][data-tooltip*="Send" i], [role="button"][aria-label*="Send" i], [role="button"].aoO');
+
+      if (!sendNearby) {
+        btn.remove();
+      }
+    });
+  }
+
+  /**
    * Main scan function: scans both Gmail email compose and Google Chat windows
    */
   function checkAndInjectButtons() {
+    cleanupStrayButtons();
     checkAndInjectEmailButtons();
     checkAndInjectChatButtons();
   }
 
   /**
-   * Scans DOM for Gmail email compose toolbars with universal multi-language support
+   * Scans DOM for Gmail Email Send buttons with universal support for:
+   * 1. New Compose Window toolbar (beside Send button)
+   * 2. Email Thread Reply inline toolbar (beside Send button in new & classic UI)
+   * NEVER touches email thread headers, top bars, or inbox lists.
    */
   function checkAndInjectEmailButtons() {
-    const toolbars = document.querySelectorAll('tr.btC, .gU.Up, .aDh');
+    // Find all Send buttons across Gmail
+    const sendBtns = document.querySelectorAll(
+      '[role="button"][data-tooltip*="Send" i]:not([aria-label*="feedback" i]), ' +
+      '[role="button"][aria-label*="Send" i]:not([aria-label*="feedback" i]), ' +
+      '[role="button"].aoO'
+    );
 
-    toolbars.forEach(toolbar => {
-      const sendBtn = toolbar.querySelector(
-        '[role="button"][data-tooltip*="Send"], [role="button"][aria-label*="Send"], [role="button"].aoO, [role="button"].T-I-atl, [role="button"][data-tooltip*="Enter"]'
-      );
-      if (!sendBtn) return;
+    sendBtns.forEach(sendBtn => {
+      // Safety guard: Must not be our own button or inside our modal
+      if (sendBtn.closest('.gmail-ai-modal-card')) return;
+      if (sendBtn.closest('[role="navigation"], .wT, .aeN')) return;
 
-      if (toolbar.querySelector('.gmail-ai-reply-btn')) return;
+      // Do not process Chat send buttons in email injector
+      const label = (sendBtn.getAttribute('aria-label') || '') + ' ' + (sendBtn.getAttribute('data-tooltip') || '');
+      if (/send message/i.test(label)) return;
+      if (sendBtn.closest('div[data-chat-room-id], c-wiz[data-topic-id]')) return;
 
-      const sendParent = sendBtn.closest('td') || sendBtn.parentElement;
-      if (!sendParent) return;
-      if (sendParent.querySelector('.gmail-ai-reply-btn')) return;
+      // Locate the outer split-button element so our button sits right beside [Send | ▼]
+      let anchor = sendBtn;
+      let curr = sendBtn;
+      while (curr && curr.parentElement && curr.parentElement !== document.body) {
+        if (curr.parentElement.querySelector('[aria-label*="More send options" i], [data-tooltip*="More send options" i]')) {
+          anchor = curr.parentElement;
+          break;
+        }
+        if (curr.classList.contains('T-I-J3') || curr.parentElement.classList.contains('T-I-J3')) {
+          anchor = curr.classList.contains('T-I-J3') ? curr : curr.parentElement;
+          break;
+        }
+        if (curr.tagName === 'TD') {
+          anchor = curr;
+          break;
+        }
+        curr = curr.parentElement;
+      }
 
-      const aiBtn = createAiReplyButton(toolbar, false /* isChat = false */);
-      sendParent.appendChild(aiBtn);
+      const toolbar = anchor.parentElement || sendBtn.parentElement;
+      if (!toolbar) return;
+
+      // Prevent duplicate injection in the same toolbar
+      if (toolbar.querySelector('.gmail-ai-reply-btn') || anchor.querySelector?.('.gmail-ai-reply-btn')) {
+        return;
+      }
+
+      // Find the compose root container to pass to modal
+      const composeRoot = sendBtn.closest('table.aoP, form, div[role="region"], div[role="dialog"], .M9, .nH.Hd') || toolbar;
+
+      const aiBtn = createAiReplyButton(composeRoot, false /* isChat = false */);
+
+      // In classic table compose: append to TD. In new flexbox: insert directly after Send group
+      if (anchor.tagName === 'TD') {
+        anchor.appendChild(aiBtn);
+      } else if (anchor.parentElement) {
+        anchor.parentElement.insertBefore(aiBtn, anchor.nextSibling);
+      } else {
+        toolbar.appendChild(aiBtn);
+      }
     });
   }
 
   /**
-   * Scans DOM for Google Chat composer (both inside Gmail and standalone chat.google.com)
-   * Strictly targets ONLY the bottom chat input pill and NEVER touches the left navigation rail.
+   * Scans DOM for Google Chat composer (both standalone chat.google.com and inside Gmail).
+   * Injects the AI Reply button right BEFORE Google's Smart Reply suggestion chips in middle alignment.
+   * If suggestions aren't present yet, it cleanly sits in a suggestion row right above the chat input pill.
    */
   function checkAndInjectChatButtons() {
-    // 0. Safety cleanup: remove any buttons that accidentally land in Gmail's left navigation sidebar
-    document.querySelectorAll(
-      '.wT .gmail-ai-reply-btn, .aKh .gmail-ai-reply-btn, .aeN .gmail-ai-reply-btn, [role="navigation"] .gmail-ai-reply-btn'
-    ).forEach(strayBtn => strayBtn.remove());
-
-    // Strategy 1: Find all potential chat textboxes
-    const textboxes = document.querySelectorAll(
-      'div[role="textbox"], div[contenteditable], [aria-label*="History is on"], [aria-label*="message" i]'
-    );
+    const textboxes = document.querySelectorAll('div[role="textbox"][contenteditable="true"]');
 
     textboxes.forEach(textbox => {
-      // Must NOT be Gmail email compose editor
-      if (textbox.closest('tr.btC, td.gU, .aDh, .M9, form.b7, table.aoP, div[aria-label*="Message Body"]')) {
-        return;
-      }
-      // Must NOT be in Gmail left navigation sidebar
-      if (textbox.closest('.wT, .aKh, .aeN, [role="navigation"]')) {
-        return;
-      }
-      // Must NOT be our own modal's textarea or search bar
-      if (textbox.closest('.gmail-ai-modal-card') || textbox.getAttribute('aria-label')?.includes('Search') || textbox.getAttribute('name') === 'q') {
-        return;
-      }
+      // Exclude Gmail email compose
+      if (textbox.closest('table.aoP, .aoP, .M9, .nH.Hd, form.b7, div[aria-label*="Message Body" i]')) return;
+      // Exclude search or our modal
+      if (textbox.closest('.gmail-ai-modal-card') || textbox.getAttribute('name') === 'q') return;
 
-      // Find the surrounding chat composer container
-      const composer = textbox.closest('form, div[role="region"], div[role="main"], c-wiz, div[aria-label*="Conversation"], div.HH22ic') || textbox.parentElement?.parentElement?.parentElement;
+      const composer = textbox.closest('div[role="region"], div[data-chat-room-id], c-wiz, form') || textbox.parentElement?.parentElement;
       if (!composer) return;
-      if (composer.querySelector('.gmail-ai-reply-btn')) return;
 
-      // Find action icons (A, emoji, gif, upload, mic) inside this composer
-      const actionIcon = composer.querySelector(
-        '[aria-label*="voice" i], [aria-label*="audio" i], [aria-label*="mic" i], ' +
-        '[data-tooltip*="voice" i], [data-tooltip*="mic" i], ' +
-        '[aria-label*="emoji" i], [data-tooltip*="emoji" i], ' +
-        '[aria-label*="format" i], [data-tooltip*="format" i], ' +
-        '[aria-label*="attach" i], [aria-label*="upload" i]'
-      );
-
-      if (actionIcon && actionIcon.parentElement) {
-        const iconRow = actionIcon.parentElement;
-        if (!iconRow.querySelector('.gmail-ai-reply-btn')) {
-          const aiBtn = createAiReplyButton(composer, true /* isChat = true */);
-          iconRow.appendChild(aiBtn);
-          return;
+      // Locate the input pill container (holds '+', textbox, formatting, emoji, mic, send)
+      let inputPill = textbox;
+      let curr = textbox;
+      while (curr && curr.parentElement && curr.parentElement !== composer) {
+        if (curr.parentElement.querySelector('[aria-label*="Send message" i], [data-tooltip*="Send message" i], [aria-label*="format" i], [aria-label*="emoji" i]')) {
+          inputPill = curr.parentElement;
+          break;
         }
+        curr = curr.parentElement;
       }
 
-      // Fallback: look for the Send button in this composer
-      const sendBtn = composer.querySelector(
-        '[aria-label*="Send message" i], [data-tooltip*="Send message" i], ' +
-        '[aria-label*="Send" i]:not([aria-label*="feedback" i]), [data-tooltip*="Send" i]'
-      );
+      // 1. Look for existing Smart Reply suggestion chips (e.g. "Good, and you?", "Fine", etc.)
+      const allButtons = Array.from(composer.querySelectorAll('button, div[role="button"]'));
+      const candidateChips = allButtons.filter(b => {
+        if (b.classList.contains('gmail-ai-reply-btn')) return false;
+        if (b.closest('.gmail-ai-modal-card')) return false;
+        // Must be outside the input pill
+        if (inputPill && inputPill.contains(b)) return false;
+        // Must contain suggestion text
+        const txt = (b.innerText || '').trim();
+        if (txt.length < 2 || txt.length > 50) return false;
+        const lower = txt.toLowerCase();
+        if (['today', 'yesterday', 'history is on', 'history is off'].includes(lower)) return false;
+        return true;
+      });
 
-      if (sendBtn && sendBtn.parentElement) {
-        const sendContainer = sendBtn.parentElement;
-        if (!sendContainer.querySelector('.gmail-ai-reply-btn') && !sendContainer.parentElement?.querySelector('.gmail-ai-reply-btn')) {
-          const aiBtn = createAiReplyButton(composer, true /* isChat = true */);
-          sendContainer.insertBefore(aiBtn, sendBtn);
+      const existingBtn = composer.querySelector('.gmail-ai-chat-btn');
+
+      if (candidateChips.length > 0) {
+        const firstChip = candidateChips[0];
+        const chipContainer = firstChip.parentElement;
+
+        if (existingBtn) {
+          // If already in chipContainer directly before firstChip, nothing to do
+          if (existingBtn.parentElement === chipContainer && existingBtn.nextElementSibling === firstChip) {
+            return;
+          }
+          // Move existing button to right before the first suggestion chip
+          chipContainer.insertBefore(existingBtn, firstChip);
           return;
         }
-      }
 
-      // Fallback: insert beside textbox
-      if (textbox.parentElement && !textbox.parentElement.querySelector('.gmail-ai-reply-btn')) {
         const aiBtn = createAiReplyButton(composer, true /* isChat = true */);
-        textbox.parentElement.appendChild(aiBtn);
+        chipContainer.insertBefore(aiBtn, firstChip);
+        return;
       }
-    });
 
-    // Strategy 2: Find Google Chat Send button directly (paper airplane)
-    const directSendBtns = document.querySelectorAll(
-      'div[role="button"][aria-label*="Send message" i], button[aria-label*="Send message" i], ' +
-      'div[role="button"][data-tooltip*="Send message" i], button[data-tooltip*="Send message" i]'
-    );
+      // 2. If no suggestion chips are currently present, place in row directly above the input pill
+      if (inputPill && inputPill.parentElement) {
+        let suggestionRow = composer.querySelector('.gmail-ai-chat-suggestion-row');
+        if (!suggestionRow) {
+          suggestionRow = document.createElement('div');
+          suggestionRow.className = 'gmail-ai-chat-suggestion-row';
+          inputPill.parentElement.insertBefore(suggestionRow, inputPill);
+        }
 
-    directSendBtns.forEach(sendBtn => {
-      if (sendBtn.closest('tr.btC, td.gU, .aDh, table.aoP, .wT, [role="navigation"]')) return;
-      const parent = sendBtn.parentElement;
-      if (!parent || parent.querySelector('.gmail-ai-reply-btn') || parent.parentElement?.querySelector('.gmail-ai-reply-btn')) return;
-
-      const chatRoot = sendBtn.closest('form, div[role="region"], div[role="main"], c-wiz, div[aria-label*="Conversation"]') || parent;
-      if (chatRoot.querySelector('.gmail-ai-reply-btn')) return;
-
-      const aiBtn = createAiReplyButton(chatRoot, true /* isChat = true */);
-      parent.insertBefore(aiBtn, sendBtn);
+        if (!suggestionRow.querySelector('.gmail-ai-chat-btn')) {
+          if (existingBtn) {
+            suggestionRow.appendChild(existingBtn);
+          } else {
+            const aiBtn = createAiReplyButton(composer, true /* isChat = true */);
+            suggestionRow.appendChild(aiBtn);
+          }
+        }
+      }
     });
   }
 
@@ -383,11 +474,12 @@
     const emailData = isChat ? extractChatData(toolbar) : extractIncomingEmailData(toolbar);
     emailData.isChat = isChat;
     const existingDraftText = getComposeDraftText(toolbar, isChat);
+    const isNewCompose = !isChat && !(emailData.body && emailData.body.trim().length >= 5);
 
     const card = document.createElement('div');
     card.className = 'gmail-ai-modal-card';
 
-    let activeTab = existingDraftText ? 'polish' : 'generate';
+    let activeTab = 'generate'; // Always default to ✍️ New Reply on modal open
     let selectedTone = isChat ? 'friendly' : 'professional';
 
     card.innerHTML = `
@@ -406,9 +498,6 @@
           ${emailData.sender ? `<span class="gmail-ai-recipient-tag" title="${escapeHtml(emailData.sender)}">👤 ${escapeHtml(truncate(emailData.sender, 22))}</span>` : ''}
         </div>
         <div style="display: flex; align-items: center; gap: 6px;">
-          <button type="button" class="gmail-ai-tldr-toggle-btn" id="gmail-ai-tldr-btn" title="${isChat ? 'Summarize conversation history' : 'Summarize incoming email & action items'}">
-            <span>⚡</span> TL;DR
-          </button>
           <button type="button" class="gmail-ai-modal-close-btn" title="Close (Esc)">&times;</button>
         </div>
       </div>
@@ -418,138 +507,93 @@
         <!-- Feature 1: Summary Box Container (Dynamic) -->
         <div id="gmail-ai-summary-container" style="display: none; margin-bottom: 10px;"></div>
 
+        ${isNewCompose ? `<div class="gmail-ai-newmail-hint">✍️ <strong>New Email Mode</strong> — No incoming email detected. Describe what you want to say and AI will write a complete email from scratch.</div>` : ''}
+
         <!-- Modern Prompt Box -->
         <div class="gmail-ai-prompt-box">
-          <textarea 
-            class="gmail-ai-textarea" 
-            placeholder="${isChat ? 'Type instructions (e.g. tell him I will check and reply in 10 mins)...' : 'Type instructions or notes (e.g. confirm 3 PM call)...'}"
+          <textarea
+            class="gmail-ai-textarea"
+            placeholder="${isChat ? 'Type instructions (e.g. tell him I will check and reply in 10 mins)...' : (isNewCompose ? 'What should this email say? (e.g. ask John for Friday meeting agenda, confirm invoice received, request vacation leave)...' : 'Type instructions or notes (e.g. confirm 3 PM call)...')}"
           ></textarea>
         </div>
 
-        <!-- TAB 1: GENERATE NEW REPLY -->
-        <div id="tab-generate-panel" style="${activeTab === 'generate' ? 'display: block;' : 'display: none;'}">
-          <!-- Quick Smart Replies -->
-          <div style="margin-bottom: 12px;">
-            <div class="gmail-ai-section-title">
-              <span>${isChat ? 'Quick Chat Replies' : 'Quick Smart Replies'}</span>
-              <span style="font-weight: normal; text-transform: none; font-size: 10px; color: #94a3b8;">1-click generate</span>
+        <!-- TAB 1: GENERATE NEW REPLY (Selected by default) -->
+        <div id="tab-generate-panel" style="display: block;">
+          <!-- Dual Dropdowns Row: Quick Smart Replies (50%) & Tone & Voice (50%) -->
+          <div class="gmail-ai-dual-dropdowns-row">
+            <!-- 50%: Quick Smart Replies Dropdown -->
+            <div class="gmail-ai-dropdown-col">
+              <label class="gmail-ai-dropdown-label" for="gmail-ai-intent-select">
+                <span>⚡ Smart Reply Intent</span>
+              </label>
+              <div class="gmail-ai-dropdown-wrap">
+                <select class="gmail-ai-dropdown-select" id="gmail-ai-intent-select">
+                  <option value="" selected>⚡ Auto / Custom Only</option>
+                  ${isChat ? `
+                    <option value="Warmly greet, acknowledge, and ask how you can assist">👋 Quick Hello & Greet</option>
+                    <option value="Acknowledge, agree positively, and confirm sounds great">👍 Sounds Good / Agree</option>
+                    <option value="Let them know you are actively working on it right now">⚡ On It! (In Progress)</option>
+                    <option value="Acknowledge message and let them know you will check and reply shortly">⏳ Check & Reply Soon</option>
+                    <option value="meeting">📅 Propose Quick Call</option>
+                    <option value="Friendly short thank you and appreciation">🙏 Thanks & Appreciation</option>
+                  ` : `
+                    <option value="Acknowledge with sincere thanks and confirm receipt">🙏 Thanks & Received</option>
+                    <option value="Confirm agreement, accept positively, and outline next steps">👍 Confirm & Agree</option>
+                    <option value="meeting">📅 Propose Meeting</option>
+                    <option value="Provide a direct and clear status update">⚡ Quick Status Update</option>
+                    <option value="Politely and courteously decline with sincere gratitude">❌ Polite Decline</option>
+                    <option value="Politely request additional details and clarification">❓ Request Details</option>
+                    <option value="Courteously follow up on previous discussion">🤝 Follow Up</option>
+                  `}
+                </select>
+                <svg class="gmail-ai-dropdown-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 8l4 4 4-4"/>
+                </svg>
+              </div>
             </div>
-            <div class="gmail-ai-chips-wrap">
-              ${isChat ? `
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Warmly greet, acknowledge, and ask how you can assist">
-                  <span>👋</span> Quick Hello
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Acknowledge, agree positively, and confirm sounds great">
-                  <span>👍</span> Sounds Good
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Let them know you are actively working on it right now">
-                  <span>⚡</span> On It!
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="meeting">
-                  <span>📅</span> Propose Call
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Friendly short thank you and appreciation">
-                  <span>🙏</span> Thanks!
-                </button>
-              ` : `
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Acknowledge with sincere thanks and confirm receipt">
-                  <span>🙏</span> Thanks & Received
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Confirm agreement, accept positively, and outline next steps">
-                  <span>👍</span> Confirm & Agree
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="meeting">
-                  <span>📅</span> Propose Meeting
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Provide a direct 2-line quick status update">
-                  <span>⚡</span> Quick Update
-                </button>
-                <button type="button" class="gmail-ai-smart-chip" data-intent="Politely and courteously decline with gratitude">
-                  <span>❌</span> Polite Decline
-                </button>
-              `}
-            </div>
-          </div>
 
-          <!-- Tone & Style Grid -->
-          <div>
-            <div class="gmail-ai-section-title">Tone & Voice</div>
-            <div class="gmail-ai-tones-grid">
-              <div class="gmail-ai-tone-card active" data-tone="professional">
-                <div class="gmail-ai-tone-card-left">
-                  <span class="gmail-ai-tone-icon">👔</span>
-                  <span>Professional</span>
-                </div>
-                <span class="gmail-ai-tone-arrow">→</span>
-              </div>
-
-              <div class="gmail-ai-tone-card" data-tone="friendly">
-                <div class="gmail-ai-tone-card-left">
-                  <span class="gmail-ai-tone-icon">😊</span>
-                  <span>Warm & Friendly</span>
-                </div>
-                <span class="gmail-ai-tone-arrow">→</span>
-              </div>
-
-              <div class="gmail-ai-tone-card" data-tone="quick">
-                <div class="gmail-ai-tone-card-left">
-                  <span class="gmail-ai-tone-icon">⚡</span>
-                  <span>Direct (2-3 lines)</span>
-                </div>
-                <span class="gmail-ai-tone-arrow">→</span>
-              </div>
-
-              <div class="gmail-ai-tone-card" data-tone="accept">
-                <div class="gmail-ai-tone-card-left">
-                  <span class="gmail-ai-tone-icon">🤝</span>
-                  <span>Accept & Confirm</span>
-                </div>
-                <span class="gmail-ai-tone-arrow">→</span>
+            <!-- 50%: Tone & Voice Dropdown -->
+            <div class="gmail-ai-dropdown-col">
+              <label class="gmail-ai-dropdown-label" for="gmail-ai-tone-select">
+                <span>🎭 Tone & Voice</span>
+              </label>
+              <div class="gmail-ai-dropdown-wrap">
+                <select class="gmail-ai-dropdown-select" id="gmail-ai-tone-select">
+                  <option value="professional" ${selectedTone === 'professional' ? 'selected' : ''}>👔 Professional</option>
+                  <option value="friendly" ${selectedTone === 'friendly' ? 'selected' : ''}>😊 Warm & Friendly</option>
+                  <option value="quick" ${selectedTone === 'quick' ? 'selected' : ''}>⚡ Direct & Concise</option>
+                  <option value="accept" ${selectedTone === 'accept' ? 'selected' : ''}>🤝 Accept & Confirm</option>
+                  <option value="executive" ${selectedTone === 'executive' ? 'selected' : ''}>👑 Executive & Formal</option>
+                  <option value="casual" ${selectedTone === 'casual' ? 'selected' : ''}>☕ Casual & Relaxed</option>
+                </select>
+                <svg class="gmail-ai-dropdown-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 8l4 4 4-4"/>
+                </svg>
               </div>
             </div>
           </div>
         </div>
 
         <!-- TAB 2: POLISH EXISTING DRAFT -->
-        <div id="tab-polish-panel" style="${activeTab === 'polish' ? 'display: block;' : 'display: none;'}">
-          <div class="gmail-ai-section-title">
-            <span>Enhance Active Draft</span>
-            <span style="font-weight: normal; text-transform: none; font-size: 10px; color: ${existingDraftText ? '#16a34a' : '#ef4444'};">
-              ${existingDraftText ? '✓ Ready to polish' : 'Write text in compose first'}
-            </span>
-          </div>
-
-          <div class="gmail-ai-polish-list">
-            <div class="gmail-ai-polish-card" data-mode="professional">
-              <div class="gmail-ai-polish-info">
-                <div class="gmail-ai-polish-title"><span>👔</span> Executive & Professional</div>
-                <div class="gmail-ai-polish-desc">Elevates draft into polished executive communication</div>
-              </div>
-              <span class="gmail-ai-tone-arrow">→</span>
-            </div>
-
-            <div class="gmail-ai-polish-card" data-mode="grammar">
-              <div class="gmail-ai-polish-info">
-                <div class="gmail-ai-polish-title"><span>✨</span> Fix Grammar & Clarity</div>
-                <div class="gmail-ai-polish-desc">Cleans spelling and syntax while preserving original meaning</div>
-              </div>
-              <span class="gmail-ai-tone-arrow">→</span>
-            </div>
-
-            <div class="gmail-ai-polish-card" data-mode="short">
-              <div class="gmail-ai-polish-info">
-                <div class="gmail-ai-polish-title"><span>🤏</span> Make Shorter & Direct</div>
-                <div class="gmail-ai-polish-desc">Removes fluff, making the email punchy and concise</div>
-              </div>
-              <span class="gmail-ai-tone-arrow">→</span>
-            </div>
-
-            <div class="gmail-ai-polish-card" data-mode="friendly">
-              <div class="gmail-ai-polish-info">
-                <div class="gmail-ai-polish-title"><span>😊</span> Warm & Courteous</div>
-                <div class="gmail-ai-polish-desc">Adds warm, conversational, and polite phrasing</div>
-              </div>
-              <span class="gmail-ai-tone-arrow">→</span>
+        <div id="tab-polish-panel" style="display: none;">
+          <div class="gmail-ai-dropdown-col" style="margin-bottom: 8px;">
+            <label class="gmail-ai-dropdown-label" for="gmail-ai-polish-select">
+              <span>🪄 Polish Mode</span>
+              <span style="font-weight: normal; text-transform: none; font-size: 10px; color: ${existingDraftText ? '#16a34a' : '#ef4444'};">
+                ${existingDraftText ? '✓ Ready to polish' : 'Write text in compose first'}
+              </span>
+            </label>
+            <div class="gmail-ai-dropdown-wrap">
+              <select class="gmail-ai-dropdown-select" id="gmail-ai-polish-select">
+                <option value="professional" selected>👔 Executive & Professional</option>
+                <option value="grammar">✨ Fix Grammar & Clarity</option>
+                <option value="short">🤏 Make Shorter & Direct</option>
+                <option value="friendly">😊 Warm & Courteous</option>
+                <option value="expand">📝 Expand & Elaborate</option>
+              </select>
+              <svg class="gmail-ai-dropdown-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 8l4 4 4-4"/>
+              </svg>
             </div>
           </div>
         </div>
@@ -591,6 +635,9 @@
 
       <!-- Dedicated Action Button Bar (Full Width, Never Cut Off) -->
       <div class="gmail-ai-action-bar">
+        ${isNewCompose ? '' : `<button type="button" class="gmail-ai-tldr-toggle-btn gmail-ai-tldr-footer-btn" id="gmail-ai-tldr-btn" title="${isChat ? 'Summarize conversation history' : 'Summarize incoming email'}">
+          📋 Summary
+        </button>`}
         <button type="button" class="gmail-ai-gen-btn-full" id="gmail-ai-submit-btn">
           ${activeTab === 'polish' ? '🪄 Polish Draft' : '✨ Generate Reply'}
         </button>
@@ -620,7 +667,8 @@
     const textarea = card.querySelector('.gmail-ai-textarea');
     const langSelect = card.querySelector('#gmail-ai-lang');
     const bottomTabs = card.querySelectorAll('.gmail-ai-bottom-nav-tab');
-    const toneCards = card.querySelectorAll('.gmail-ai-tone-card');
+    const intentSelect = card.querySelector('#gmail-ai-intent-select');
+    const toneSelect = card.querySelector('#gmail-ai-tone-select');
 
     // Auto-focus the modern prompt textarea
     setTimeout(() => textarea.focus(), 60);
@@ -670,106 +718,182 @@
       });
     });
 
-    // Feature 1: TL;DR Summary 1-Click
+    // Feature 1: TL;DR / Email Summary with Bengali & English Language Switching
     const tldrBtn = card.querySelector('#gmail-ai-tldr-btn');
     const summaryContainer = card.querySelector('#gmail-ai-summary-container');
+    const promptTextarea = card.querySelector('.gmail-ai-textarea');
+
     if (tldrBtn && summaryContainer) {
-      tldrBtn.addEventListener('click', () => {
-        if (!emailData.body || emailData.body.trim().length < 10) {
+      let activeSumLang = defaultSummaryLanguage || 'bn';
+      const cachedSummaries = {}; // { bn: '...', en: '...', both: '...' }
+
+      const renderSummaryUI = (isLoading = false, errorMsg = null) => {
+        const currentSummary = cachedSummaries[activeSumLang] || '';
+        
+        let bodyHtml = '';
+        if (isLoading) {
+          const loadingText = activeSumLang === 'bn' 
+            ? 'মেইলটি বিশ্লেষণ করে বাংলা সারসংক্ষেপ তৈরি হচ্ছে...'
+            : (activeSumLang === 'both' ? 'Generating summary in both বাংলা & English...' : 'Analyzing email and generating English summary...');
+          bodyHtml = `
+            <div class="gmail-ai-summary-loading">
+              <span style="display:inline-block; width:12px; height:12px; border:2px solid #cbd5e1; border-top-color:#6366f1; border-radius:50%; animation:aiSpin .7s linear infinite; margin-right:6px; vertical-align:middle;"></span>
+              <span>${loadingText}</span>
+            </div>
+          `;
+        } else if (errorMsg) {
+          bodyHtml = `<div style="color: #ef4444; font-size: 11.5px; padding: 4px 0;">❌ ${escapeHtml(errorMsg)}</div>`;
+        } else {
+          bodyHtml = `
+            ${renderStructuredSummary(currentSummary)}
+            <div class="gmail-ai-summary-footer">
+              <button type="button" class="gmail-ai-sum-action-btn" id="gmail-ai-sum-copy">📋 Copy</button>
+              <button type="button" class="gmail-ai-sum-action-btn" id="gmail-ai-sum-use">✍️ Use as Reply Notes</button>
+            </div>
+          `;
+        }
+
+        summaryContainer.innerHTML = `
+          <div class="gmail-ai-summary-box">
+            <div class="gmail-ai-summary-header">
+              <div class="gmail-ai-summary-title">
+                <span>⚡</span>
+                <span>Email Summary</span>
+              </div>
+              <div class="gmail-ai-sum-lang-wrap">
+                <select class="gmail-ai-sum-lang-select" id="gmail-ai-sum-lang-select" title="Summary language">
+                  <option value="bn" ${activeSumLang === 'bn' ? 'selected' : ''}>🇧🇩 বাংলা</option>
+                  <option value="en" ${activeSumLang === 'en' ? 'selected' : ''}>🇺🇸 English</option>
+                  <option value="both" ${activeSumLang === 'both' ? 'selected' : ''}>🌐 Both</option>
+                </select>
+                <span class="gmail-ai-sum-lang-arrow">▼</span>
+              </div>
+              <button type="button" class="gmail-ai-summary-close" title="Close">&times;</button>
+            </div>
+            <div class="gmail-ai-summary-body">
+              ${bodyHtml}
+            </div>
+          </div>
+        `;
+
+        // Bind language dropdown
+        const langSel = summaryContainer.querySelector('#gmail-ai-sum-lang-select');
+        if (langSel) {
+          langSel.addEventListener('change', (e) => {
+            e.stopPropagation();
+            const newLang = langSel.value;
+            if (newLang === activeSumLang && !isLoading) return;
+            activeSumLang = newLang;
+            chrome.storage.local.set({ summaryLanguage: newLang });
+            fetchOrShowSummary();
+          });
+        }
+
+        // Bind close button
+        const closeBtn = summaryContainer.querySelector('.gmail-ai-summary-close');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => {
+            summaryContainer.style.display = 'none';
+          });
+        }
+
+        // Bind action buttons
+        const copyBtn = summaryContainer.querySelector('#gmail-ai-sum-copy');
+        if (copyBtn && currentSummary) {
+          copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(currentSummary);
+            copyBtn.textContent = '✅ Copied!';
+            setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 2000);
+          });
+        }
+
+        const useBtn = summaryContainer.querySelector('#gmail-ai-sum-use');
+        if (useBtn && currentSummary && promptTextarea) {
+          useBtn.addEventListener('click', () => {
+            const firstLine = currentSummary.split('\n')[0] || currentSummary;
+            const cleanShort = firstLine.replace(/^[📌🎯⏰\s]+/, '').trim();
+            promptTextarea.value = promptTextarea.value 
+              ? `${promptTextarea.value}\n(Context: ${cleanShort})`
+              : `Context: ${cleanShort}`;
+            promptTextarea.focus();
+            useBtn.textContent = '✅ Added to prompt!';
+            setTimeout(() => { useBtn.textContent = '✍️ Use as Reply Notes'; }, 2000);
+          });
+        }
+      };
+
+      const fetchOrShowSummary = () => {
+        const bodyContent = (emailData.body || emailData.emailBody || '').trim();
+        if (!bodyContent || bodyContent.length < 10) {
           showToast('⚠️ No incoming email message detected to summarize.');
           return;
         }
 
         summaryContainer.style.display = 'block';
-        summaryContainer.innerHTML = `
-          <div class="gmail-ai-summary-box">
-            <div class="gmail-ai-summary-header">
-              <span>⚡ Generating Summary & Actions...</span>
-              <button type="button" class="gmail-ai-summary-close" title="Close">&times;</button>
-            </div>
-            <div style="font-size: 11.5px; color: #64748b; font-style: italic;">
-              Analyzing incoming email with AI...
-            </div>
-          </div>
-        `;
 
-        const closeBtn = summaryContainer.querySelector('.gmail-ai-summary-close');
-        if (closeBtn) {
-          closeBtn.addEventListener('click', () => {
-            summaryContainer.style.display = 'none';
-            summaryContainer.innerHTML = '';
-          });
+        if (cachedSummaries[activeSumLang]) {
+          renderSummaryUI(false, null);
+          return;
         }
+
+        renderSummaryUI(true, null);
 
         safeSendMessage({
           action: 'SUMMARIZE_EMAIL',
-          data: emailData
+          data: {
+            ...emailData,
+            language: activeSumLang
+          }
         }, (response) => {
-          if (!response) return;
+          if (!response) {
+            renderSummaryUI(false, 'No response from AI worker.');
+            return;
+          }
           if (response.success && response.summary) {
-            summaryContainer.innerHTML = `
-              <div class="gmail-ai-summary-box">
-                <div class="gmail-ai-summary-header">
-                  <span>⚡ Summary & Action Items</span>
-                  <button type="button" class="gmail-ai-summary-close" title="Close">&times;</button>
-                </div>
-                <div style="font-size: 11.5px; color: #1e293b; line-height: 1.45; white-space: pre-wrap;">${escapeHtml(response.summary)}</div>
-              </div>
-            `;
-            const dynClose = summaryContainer.querySelector('.gmail-ai-summary-close');
-            if (dynClose) {
-              dynClose.addEventListener('click', () => {
-                summaryContainer.style.display = 'none';
-                summaryContainer.innerHTML = '';
-              });
-            }
+            cachedSummaries[activeSumLang] = response.summary;
+            renderSummaryUI(false, null);
           } else {
-            summaryContainer.style.display = 'none';
-            showToast(formatProviderError(response.error || 'Failed to summarize email.'));
+            const err = formatProviderError(response.error || 'Failed to summarize email.');
+            renderSummaryUI(false, err);
           }
         });
+      };
+
+      tldrBtn.addEventListener('click', () => {
+        if (summaryContainer.style.display === 'block') {
+          summaryContainer.style.display = 'none';
+        } else {
+          fetchOrShowSummary();
+        }
       });
     }
 
-    // Smart Chip 1-Click Generation
-    card.querySelectorAll('.gmail-ai-smart-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const intent = chip.getAttribute('data-intent');
-        triggerReplyGeneration(card, toolbar, emailData, selectedTone, intent);
+    // Tone Select changes selectedTone
+    if (toneSelect) {
+      toneSelect.addEventListener('change', () => {
+        selectedTone = toneSelect.value;
       });
-    });
+    }
 
-    // Tone Card Selection & Generation
-    toneCards.forEach(tc => {
-      tc.addEventListener('click', () => {
-        toneCards.forEach(c => c.classList.remove('active'));
-        tc.classList.add('active');
-        selectedTone = tc.getAttribute('data-tone');
-        triggerReplyGeneration(card, toolbar, emailData, selectedTone, '');
-      });
-    });
-
-    // Polish Card 1-Click Polish
-    card.querySelectorAll('.gmail-ai-polish-card').forEach(item => {
-      item.addEventListener('click', () => {
-        const mode = item.getAttribute('data-mode');
-        triggerPolishDraft(card, toolbar, mode, '', isChat);
-      });
-    });
+    const polishSelect = card.querySelector('#gmail-ai-polish-select');
 
     // Generate / Submit Button
     submitBtn.addEventListener('click', () => {
       const customNotes = textarea.value.trim();
+      const currentTone = toneSelect ? toneSelect.value : selectedTone;
+      const currentIntent = intentSelect ? intentSelect.value : '';
+
       if (activeTab === 'generate') {
-        triggerReplyGeneration(card, toolbar, emailData, selectedTone, customNotes);
+        triggerReplyGeneration(card, toolbar, emailData, currentTone, currentIntent);
       } else {
-        triggerPolishDraft(card, toolbar, isChat ? 'friendly' : 'professional', customNotes, isChat);
+        const polishMode = polishSelect ? polishSelect.value : 'professional';
+        triggerPolishDraft(card, toolbar, polishMode, customNotes, isChat);
       }
     });
 
-    // Keyboard Shortcuts: Enter (with Ctrl/Cmd or plain Enter in empty text)
+    // Keyboard Shortcuts: Enter submits, Shift+Enter creates a new line
     textarea.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         submitBtn.click();
       } else if (e.key === 'Escape') {
@@ -861,13 +985,20 @@
     const isMultiDraft = multiChk ? multiChk.checked : false;
 
     let computedIntent = intentNote || '';
-    if (intentNote === 'meeting') {
+    if (computedIntent === 'meeting') {
       computedIntent = cachedMeetingLink
         ? `Propose scheduling a meeting/call and include booking link directly: ${cachedMeetingLink}`
         : 'Propose scheduling a 20-30 minute meeting call next week and ask for their availability.';
     }
 
-    const fullNotes = [computedIntent, customNotes].filter(Boolean).join(' | ');
+    const notesList = [];
+    if (computedIntent) {
+      notesList.push(`INTENT / CORE ACTION: ${computedIntent}`);
+    }
+    if (customNotes) {
+      notesList.push(`USER SHORT SUMMARY / NOTES TO ADDRESS: ${customNotes}`);
+    }
+    const fullNotes = notesList.join('\n');
 
     if (loadText) {
       loadText.textContent = isMultiDraft ? 'Generating 3 draft variations...' : (isChat ? 'Generating quick chat reply...' : 'Generating smart reply...');
@@ -1092,8 +1223,35 @@
    * Inserts text into Gmail's or Google Chat's contenteditable compose box reliably
    */
   function insertTextIntoCompose(toolbar, text, isChat = false) {
-    const editor = findComposeEditor(toolbar, isChat);
+    let editor = findComposeEditor(toolbar, isChat);
     if (!editor) {
+      if (!isChat) {
+        // Auto-open reply if in an email thread and compose isn't open yet
+        const replyBtn = document.querySelector(
+          'div[role="button"][aria-label*="Reply" i], span[role="link"][data-tooltip*="Reply" i], .ams.bkH'
+        );
+        if (replyBtn) {
+          replyBtn.click();
+          setTimeout(() => {
+            const freshEditor = document.querySelector('div[role="textbox"][contenteditable="true"], div[aria-label*="Message Body"]');
+            if (freshEditor) {
+              freshEditor.focus();
+              document.execCommand('selectAll', false, null);
+              const htmlToInsert = text.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+              try {
+                document.execCommand('insertHTML', false, htmlToInsert + '<br><br>');
+              } catch (_) {}
+              if (!freshEditor.innerText.trim()) {
+                freshEditor.innerHTML = htmlToInsert + '<br><br>';
+              }
+              freshEditor.dispatchEvent(new Event('input', { bubbles: true }));
+              freshEditor.dispatchEvent(new Event('change', { bubbles: true }));
+              showToast('✨ Reply inserted into email box!');
+            }
+          }, 350);
+          return true;
+        }
+      }
       console.error('[AI Assistant] Could not find compose editor in DOM');
       return false;
     }
@@ -1319,6 +1477,71 @@
       return '🚫 Invalid API key. Re-check it in the extension popup.';
     }
     return '❌ ' + msg;
+  }
+
+  /**
+   * Parses AI summary text into structured section cards.
+   * Recognises leading emoji markers (📌 🎯 ⏰ 🇧🇩 🇺🇸) and splits accordingly.
+   */
+  function renderStructuredSummary(text) {
+    if (!text) return '';
+    const raw = String(text).trim();
+
+    // Section-header pattern: emoji + optional label + ":"
+    const sectionRe = /^\s*(📌|🎯|⏰|🇧🇩|🇺🇸)\s*([^:：\n]*)[:：]\s*/;
+    const lines = raw.split(/\r?\n/);
+    const sections = [];
+    let current = null;
+
+    for (const line of lines) {
+      const m = line.match(sectionRe);
+      if (m) {
+        if (current) sections.push(current);
+        current = { icon: m[1], label: m[2].trim(), body: line.slice(m[0].length).trim() };
+      } else if (current) {
+        if (line.trim()) current.body += (current.body ? '\n' : '') + line;
+      } else if (line.trim()) {
+        current = { icon: '📝', label: '', body: line };
+      }
+    }
+    if (current) sections.push(current);
+
+    if (sections.length === 0) {
+      return `<div class="gmail-ai-summary-text">${escapeHtml(raw)}</div>`;
+    }
+
+    const renderBody = (body) => {
+      // Turn lines starting with -, •, * into a bullet list
+      const bodyLines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const bulletLines = bodyLines.filter(l => /^[-•*]\s+/.test(l));
+      if (bulletLines.length && bulletLines.length === bodyLines.length) {
+        return `<ul class="gmail-ai-sum-list">${
+          bodyLines.map(l => `<li>${escapeHtml(l.replace(/^[-•*]\s+/, ''))}</li>`).join('')
+        }</ul>`;
+      }
+      return `<div class="gmail-ai-sum-section-text">${escapeHtml(body)}</div>`;
+    };
+
+    return `<div class="gmail-ai-sum-sections">${
+      sections.map(s => {
+        const isFlag = /🇧🇩|🇺🇸/.test(s.icon);
+        if (isFlag) {
+          // Flag = sub-group heading (bilingual mode)
+          return `<div class="gmail-ai-sum-lang-divider"><span>${s.icon}</span><span>${escapeHtml(s.label || '')}</span></div>${
+            s.body ? renderBody(s.body) : ''
+          }`;
+        }
+        return `
+          <div class="gmail-ai-sum-section">
+            <div class="gmail-ai-sum-section-head">
+              <span class="gmail-ai-sum-section-icon">${s.icon}</span>
+              <span class="gmail-ai-sum-section-label">${escapeHtml(s.label || '')}</span>
+            </div>
+            ${renderBody(s.body)}
+          </div>
+        `;
+      }).join('')
+    }</div>`;
   }
 
   function escapeHtml(str) {
